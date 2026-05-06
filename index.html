@@ -1,1 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>DigiMarket | Digital Products Marketplace</title>
+  <!-- Google Fonts & Font Awesome -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <!-- Firebase SDKs -->
+  <script type="module">
+    // Import Firebase modules dynamically (modular SDK v9)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+    import { getFirestore, collection, addDoc, getDocs, query, where, orderBy, deleteDoc, doc, updateDoc, getDoc, setDoc, onSnapshot, arrayUnion, increment } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
 
+    // ----- FIREBASE CONFIG (REPLACE WITH YOUR CREDENTIALS) -----
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    // !!! IMPORTANT: Replace with real Firebase project config for full functionality !!!
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    // Flutterwave Public Key (replace with your live/test key)
+    const FLW_PUBLIC_KEY = "FLWPUBK_TEST_xxxxxxxxxxxxxxxxxxxxx";
+
+    // Make globals accessible in non-module script scope
+    window.db = db;
+    window.auth = auth;
+    window.storage = storage;
+    window.FLW_PUBLIC_KEY = FLW_PUBLIC_KEY;
+    window.getDownloadURL = getDownloadURL;
+    window.ref = ref;
+    window.uploadBytes = uploadBytes;
+    window.deleteObject = deleteObject;
+    window.getDoc = getDoc;
+    window.setDoc = setDoc;
+    window.updateDoc = updateDoc;
+    window.doc = doc;
+    window.collection = collection;
+    window.addDoc = addDoc;
+    window.getDocs = getDocs;
+    window.query = query;
+    window.where = where;
+    window.orderBy = orderBy;
+    window.onSnapshot = onSnapshot;
+    window.deleteDoc = deleteDoc;
+    window.arrayUnion = arrayUnion;
+    window.increment = increment;
+    window.signOut = signOut;
+
+    // Helper to attach to window for inline handlers
+    window.attachFirebaseHelpers = true;
+    console.log("Firebase modular initialized");
+  </script>
+  <!-- Local Script Bridge -->
+  <script>
+    window.FBReady = new Promise((resolve) => {
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          if (window.db && window.auth) resolve();
+          else console.warn("waiting for firebase modules");
+        }, 200);
+      });
+    });
+  </script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+    }
+
+    :root {
+      --bg-dark: #0a1a1a;
+      --card-bg: #112121;
+      --primary-green: #2b8c5e;
+      --primary-dark: #1f6e4a;
+      --accent-gold: #e6b422;
+      --text-light: #eef4f0;
+      --text-dim: #a3c2b8;
+      --danger: #e05a5a;
+      --border-radius: 1.25rem;
+      --shadow: 0 12px 28px rgba(0,0,0,0.3);
+    }
+
+    body {
+      background: var(--bg-dark);
+      color: var(--text-light);
+      padding-bottom: 2rem;
+    }
+
+    /* Navbar */
+    .navbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      background: #0e1e1e;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      font-size: 1.6rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #2b8c5e, #6bcb9a);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .nav-buttons button, .auth-buttons button {
+      background: var(--primary-green);
+      border: none;
+      padding: 0.5rem 1rem;
+      margin-left: 0.5rem;
+      border-radius: 2rem;
+      color: white;
+      font-weight: 500;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .nav-buttons button:hover {
+      background: var(--primary-dark);
+      transform: scale(0.96);
+    }
+    /* marketplace grid */
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+    .search-filter {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      justify-content: space-between;
+    }
+    .search-box {
+      flex: 2;
+      background: #1a2f2f;
+      border-radius: 3rem;
+      display: flex;
+      align-items: center;
+      padding: 0.5rem 1rem;
+    }
+    .search-box i {
+      color: var(--primary-green);
+    }
+    .search-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: white;
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+    .category-filter select {
+      background: #1a2f2f;
+      border: none;
+      padding: 0.7rem 1.5rem;
+      border-radius: 2rem;
+      color: white;
+      font-weight: 500;
+    }
+    .products-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.8rem;
+    }
+    .product-card {
+      background: var(--card-bg);
+      border-radius: var(--border-radius);
+      overflow: hidden;
+      transition: all 0.25s ease;
+      cursor: pointer;
+      box-shadow: 0 5px 12px rgba(0,0,0,0.2);
+      backdrop-filter: blur(2px);
+      border: 1px solid #2a4040;
+    }
+    .product-card:hover {
+      transform: translateY(-6px);
+      border-color: var(--primary-green);
+      box-shadow: var(--shadow);
+    }
+    .card-img {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      background: #1e2e2e;
+    }
+    .card-content {
+      padding: 1rem;
+    }
+    .product-title {
+      font-weight: 700;
+      font-size: 1.2rem;
+    }
+    .price {
+      color: var(--primary-green);
+      font-weight: 800;
+      margin-top: 0.3rem;
+    }
+    .seller {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 0.5rem;
+    }
+    .category-badge {
+      display: inline-block;
+      background: #1f4a3a;
+      padding: 0.2rem 0.7rem;
+      border-radius: 2rem;
+      font-size: 0.7rem;
+    }
+    .boost-badge {
+      background: var(--accent-gold);
+      color: #0a1a1a;
+      font-weight: bold;
+    }
+    /* modals */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: #0f2020;
+      max-width: 500px;
+      width: 90%;
+      border-radius: 2rem;
+      padding: 1.8rem;
+      max-height: 85vh;
+      overflow-y: auto;
+    }
+    button {
+      background: var(--primary-green);
+      border: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 3rem;
+      color: white;
+      font-weight: 600;
+    }
+    .upload-form input, .upload-form textarea, .upload-form select {
+      width: 100%;
+      padding: 0.7rem;
+      margin: 0.5rem 0;
+      border-radius: 1rem;
+      background: #1e3333;
+      border: 1px solid #2c5a5a;
+      color: white;
+    }
+    .toast-notify {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2b8c5e;
+      padding: 0.7rem 1.5rem;
+      border-radius: 3rem;
+      z-index: 1200;
+      font-weight: 500;
+    }
+    .flex-between {
+      display: flex;
+      justify-content: space-between;
+    }
+    .rating span {
+      color: gold;
+    }
+    i.fa-star, i.fa-star-half-alt {
+      font-size: 0.9rem;
+    }
+    @media (max-width: 640px) {
+      .navbar { flex-direction: column; gap: 0.5rem; }
+      .products-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="navbar">
+  <div class="logo"><i class="fas fa-store"></i> DigiMarket</div>
+  <div class="auth-buttons" id="authButtons">
+    <button id="loginBtn">Login</button>
+    <button id="signupBtn">Sign Up</button>
+  </div>
+  <div class="nav-buttons" id="userMenu" style="display:none;">
+    <button id="dashboardBtn"><i class="fas fa-chart-line"></i> Seller Hub</button>
+    <button id="adminPanelBtn" style="display:none;"><i class="fas fa-shield-alt"></i> Admin</button>
+    <button id="uploadProductBtn"><i class="fas fa-cloud-upload-alt"></i> Upload</button>
+    <button id="logoutBtn">Logout</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="search-filter">
+    <div class="search-box"><i class="fas fa-search"></i><input type="text" id="searchInput" placeholder="Search products..."></div>
+    <div class="category-filter">
+      <select id="categoryFilter">
+        <option value="all">All Categories</option>
+        <option value="ebook">Ebook</option><option value="music">Music</option><option value="template">Template</option>
+        <option value="ai prompts">AI Prompts</option><option value="course">Course</option><option value="zip">ZIP</option>
+      </select>
+    </div>
+  </div>
+  <div id="productsGrid" class="products-grid"><div style="text-align:center; grid-column:1/-1;">Loading products...</div></div>
+</div>
+
+<!-- Modals -->
+<div id="productModal" class="modal"><div class="modal-content" id="productModalContent"></div></div>
+<div id="uploadModal" class="modal"><div class="modal-content"><h3>Upload Digital Product</h3><form id="uploadForm" class="upload-form"><input type="text" id="prodTitle" placeholder="Title" required><textarea id="prodDesc" placeholder="Description" rows="2"></textarea><select id="prodCategory"><option value="ebook">Ebook/PDF</option><option value="music">Music/MP3</option><option value="template">Template</option><option value="ai prompts">AI Prompts</option><option value="course">Course</option><option value="zip">ZIP file</option></select><input type="number" id="prodPrice" placeholder="Price (₦)" required><input type="text" id="sellerWhatsapp" placeholder="WhatsApp number"><input type="file" id="previewImage" accept="image/*"><input type="file" id="productFile" accept=".pdf,.zip,.mp3,.docx,.jpg,.png,.jpeg"><button type="submit">Upload Product</button><button type="button" id="closeUploadModal">Cancel</button></form></div></div>
+<div id="dashboardModal" class="modal"><div class="modal-content" style="max-width:700px;"><div id="dashboardContent"></div><button id="closeDashboard">Close</button></div></div>
+<div id="adminModal" class="modal"><div class="modal-content"><div id="adminContent"></div><button id="closeAdmin">Close</button></div></div>
+<div id="authModal" class="modal"><div class="modal-content"><h3 id="authTitle">Login</h3><form id="authForm"><input type="text" id="authName" placeholder="Full Name (signup)" style="display:none"><input type="text" id="authCountry" placeholder="Country (signup)" style="display:none"><input type="email" id="authEmail" placeholder="Email" required><input type="password" id="authPassword" placeholder="Password" required><button type="submit" id="authSubmitBtn">Login</button><button type="button" id="closeAuthModal">Cancel</button></form></div></div>
+
+<script>
+  (async function() {
+    await window.FBReady;
+    const db = window.db, auth = window.auth, storage = window.storage;
+    let currentUser = null, currentUserDoc = null;
+
+    function showToast(msg, isError = false) {
+      let toast = document.createElement('div');
+      toast.className = 'toast-notify';
+      toast.style.background = isError ? '#c74242' : '#2b8c5e';
+      toast.innerText = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    // Helper upload & compress image
+    async function compressImage(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (e) => {
+          const img = new Image();
+          img.src = e.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width, height = img.height;
+            const maxSize = 800;
+            if (width > maxSize) { height *= maxSize / width; width = maxSize; }
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(blob => resolve(blob), 'image/jpeg', 0.7);
+          };
+        };
+      });
+    }
+
+    async function uploadProduct(file, path) {
+      const storageRef = window.ref(storage, path);
+      await window.uploadBytes(storageRef, file);
+      return await window.getDownloadURL(storageRef);
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentUser) return showToast('Login required', true);
+      const title = document.getElementById('prodTitle').value;
+      const desc = document.getElementById('prodDesc').value;
+      const category = document.getElementById('prodCategory').value;
+      const price = parseFloat(document.getElementById('prodPrice').value);
+      const whatsapp = document.getElementById('sellerWhatsapp').value;
+      const previewFile = document.getElementById('previewImage').files[0];
+      const productFile = document.getElementById('productFile').files[0];
+      if (!previewFile || !productFile) return showToast('Select preview & product file', true);
+      showToast('Uploading...');
+      const compressedPreview = await compressImage(previewFile);
+      const previewUrl = await uploadProduct(compressedPreview, `previews/${Date.now()}_${previewFile.name}`);
+      const fileExt = productFile.name.split('.').pop();
+      const productUrl = await uploadProduct(productFile, `products/${Date.now()}_${currentUser.uid}.${fileExt}`);
+      const productRef = window.collection(db, 'products');
+      await window.addDoc(productRef, {
+        title, description: desc, category, price, sellerWhatsApp: whatsapp,
+        sellerId: currentUser.uid, sellerName: currentUserDoc?.name || currentUser.email, previewImageUrl: previewUrl,
+        fileUrl: productUrl, createdAt: Date.now(), boostExpiry: null, ratingAvg: 0, ratingCount: 0, boosted: false
+      });
+      showToast('Product uploaded!');
+      document.getElementById('uploadModal').style.display = 'none';
+      renderMarketplace();
+    });
+
+    async function renderMarketplace() {
+      const productsCol = window.collection(db, 'products');
+      const q = window.query(productsCol, window.orderBy('createdAt', 'desc'));
+      const snapshot = await window.getDocs(q);
+      let products = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      const category = document.getElementById('categoryFilter').value;
+      let filtered = products.filter(p => p.title?.toLowerCase().includes(searchTerm) && (category === 'all' || p.category === category));
+      const now = Date.now();
+      filtered.sort((a,b) => {
+        let aBoost = a.boostExpiry && a.boostExpiry > now ? 1 : 0;
+        let bBoost = b.boostExpiry && b.boostExpiry > now ? 1 : 0;
+        if (aBoost !== bBoost) return bBoost - aBoost;
+        return b.createdAt - a.createdAt;
+      });
+      const container = document.getElementById('productsGrid');
+      if (!filtered.length) { container.innerHTML = '<div style="grid-column:1/-1; text-align:center;">✨ No products found ✨</div>'; return; }
+      container.innerHTML = filtered.map(p => `
+        <div class="product-card" data-id="${p.id}">
+          <img class="card-img" src="${p.previewImageUrl || 'https://via.placeholder.com/300'}" onerror="this.src='https://via.placeholder.com/300'">
+          <div class="card-content"><div class="product-title">${escapeHtml(p.title)}</div>
+          <div class="price">₦${p.price}</div><div class="category-badge">${p.category}</div>
+          <div class="seller"><i class="fas fa-user"></i> ${escapeHtml(p.sellerName)}</div>
+          ${p.boostExpiry && p.boostExpiry > Date.now() ? '<div class="category-badge boost-badge"><i class="fas fa-fire"></i> Boosted</div>' : ''}
+          <div class="rating"><i class="fas fa-star"></i> ${p.ratingAvg || 0}</div></div>
+        </div>`).join('');
+      document.querySelectorAll('.product-card').forEach(card => {
+        card.addEventListener('click', (e) => { e.stopPropagation(); showProductDetail(card.dataset.id); });
+      });
+    }
+
+    function escapeHtml(str) { if(!str) return ''; return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+
+    async function showProductDetail(productId) {
+      const prodDoc = await window.getDoc(window.doc(db, 'products', productId));
+      if(!prodDoc.exists()) return;
+      const prod = { id: prodDoc.id, ...prodDoc.data() };
+      let purchased = false;
+      if(currentUser) { const purchaseQuery = await window.getDocs(window.query(window.collection(db, 'purchases'), window.where('productId', '==', productId), window.where('userId', '==', currentUser.uid))); purchased = !purchaseQuery.empty; }
+      const isSeller = currentUser && prod.sellerId === currentUser.uid;
+      const canDownload = purchased || isSeller;
+      const modal = document.getElementById('productModalContent');
+      modal.innerHTML = `
+        <h2>${escapeHtml(prod.title)}</h2><img src="${prod.previewImageUrl}" style="width:100%; border-radius:1rem; margin:1rem 0">
+        <p>${escapeHtml(prod.description)}</p><p><strong>Price:</strong> ₦${prod.price}</p><p><strong>Seller:</strong> ${escapeHtml(prod.sellerName)} | WhatsApp: ${prod.sellerWhatsApp || 'N/A'}</p>
+        <div class="flex-between"><button id="buyNowBtn" ${canDownload ? 'style="display:none"' : ''}>Buy Now</button>
+        <button id="downloadFileBtn" ${!canDownload ? 'style="display:none"' : ''}><i class="fas fa-download"></i> Download</button></div>
+        ${!canDownload && !currentUser ? '<p>Login to purchase</p>' : ''}
+        <div><strong>Rate product:</strong> <span id="rateStars">★★★★★</span></div>
+        <button id="closeDetailModal">Close</button>`;
+      document.getElementById('productModal').style.display = 'flex';
+      document.getElementById('closeDetailModal').onclick = () => document.getElementById('productModal').style.display = 'none';
+      if(!canDownload && currentUser) document.getElementById('buyNowBtn')?.addEventListener('click', () => initiateFlutterwavePayment(prod));
+      if(canDownload && document.getElementById('downloadFileBtn')) document.getElementById('downloadFileBtn').onclick = () => { window.open(prod.fileUrl, '_blank'); showToast('Download started'); };
+      const starSpan = document.getElementById('rateStars');
+      if(starSpan && currentUser && !isSeller) starSpan.addEventListener('click', async (e) => { let rating = prompt('Rate 1-5 stars:', '5'); if(rating && !isNaN(rating)) { rating = Math.min(5,Math.max(1,parseInt(rating))); const newAvg = ((prod.ratingAvg||0)*(prod.ratingCount||0) + rating)/((prod.ratingCount||0)+1); await window.updateDoc(window.doc(db,'products',productId),{ ratingAvg: newAvg, ratingCount: window.increment(1) }); showToast('Thank you for rating!'); renderMarketplace(); } });
+    }
+
+    async function initiateFlutterwavePayment(product) {
+      if(!currentUser) return showToast('Login first');
+      const FlutterwaveCheckout = window.FlutterwaveCheckout;
+      if(!FlutterwaveCheckout) { showToast('Flutterwave SDK not loaded', true); return; }
+      const tx_ref = "DM_"+Date.now()+"_"+Math.random().toString(36);
+      FlutterwaveCheckout({
+        public_key: window.FLW_PUBLIC_KEY, tx_ref, amount: product.price, currency: "NGN",
+        payment_options: "card,ussd",
+        customer: { email: currentUser.email, name: currentUserDoc?.name || currentUser.email },
+        customizations: { title: `Buy ${product.title}`, description: "Digital product", logo: "https://via.placeholder.com/100" },
+        callback: async (response) => {
+          if(response.status === "successful") {
+            await window.addDoc(window.collection(db, 'purchases'), { productId: product.id, userId: currentUser.uid, transactionId: response.transaction_id, price: product.price, timestamp: Date.now() });
+            showToast('Purchase successful! Download unlocked');
+            renderMarketplace();
+            document.getElementById('productModal').style.display = 'none';
+          } else showToast('Payment failed', true);
+        }
+      });
+    }
+
+    document.getElementById('searchInput').addEventListener('input', () => renderMarketplace());
+    document.getElementById('categoryFilter').addEventListener('change', () => renderMarketplace());
+    document.getElementById('uploadProductBtn').onclick = () => { if(currentUser) document.getElementById('uploadModal').style.display = 'flex'; else showToast('Login first'); };
+    document.getElementById('closeUploadModal').onclick = () => document.getElementById('uploadModal').style.display = 'none';
+    document.getElementById('dashboardBtn').onclick = async () => { if(!currentUser) return; await showSellerDashboard(); };
+    document.getElementById('adminPanelBtn').onclick = async () => { if(currentUserDoc?.isAdmin) await showAdminPanel(); else showToast('Access denied'); };
+    document.getElementById('logoutBtn').onclick = async () => { await window.signOut(auth); location.reload(); };
+    
+    async function showSellerDashboard() {
+      const productsSnap = await window.getDocs(window.query(window.collection(db,'products'), window.where('sellerId','==',currentUser.uid)));
+      let totalSales = 0;
+      for(const prod of productsSnap.docs) {
+        const purchasesSnap = await window.getDocs(window.query(window.collection(db,'purchases'), window.where('productId','==',prod.id)));
+        totalSales += purchasesSnap.docs.reduce((acc,p)=>acc+(p.data().price||0),0);
+      }
+      let html = `<h3>Seller Dashboard</h3><p>Total Sales: ₦${totalSales}</p><h4>Your Products</h4><ul>`;
+      for(const prodDoc of productsSnap.docs) {
+        const p = prodDoc.data();
+        html += `<li><strong>${p.title}</strong> - ₦${p.price} 
+        <button class="boostProductBtn" data-id="${prodDoc.id}">Boost</button>
+        <button class="deleteProductBtn" data-id="${prodDoc.id}">Delete</button></li>`;
+      }
+      html += `</ul><div><h4>Boost product:</h4><select id="boostDuration"><option value="100">₦100 - 24h boost</option><option value="300">₦300 - 3 days</option><option value="500">₦500 - 7 days</option></select><button id="boostPayBtn">Pay & Boost</button><div id="boostProductIdHolder" style="display:none;"></div></div>`;
+      document.getElementById('dashboardContent').innerHTML = html;
+      document.getElementById('dashboardModal').style.display = 'flex';
+      document.querySelectorAll('.deleteProductBtn').forEach(btn => btn.addEventListener('click', async (e) => { const pid = btn.dataset.id; if(confirm('Delete product?')) { await window.deleteDoc(window.doc(db,'products',pid)); showToast('Deleted'); renderMarketplace(); showSellerDashboard(); } }));
+      let selectedBoostId = null;
+      document.querySelectorAll('.boostProductBtn').forEach(btn => { btn.addEventListener('click',()=>{ selectedBoostId = btn.dataset.id; document.getElementById('boostProductIdHolder').innerText = selectedBoostId; showToast(`Selected ${btn.parentElement.querySelector('strong').innerText} for boost`); }); });
+      document.getElementById('boostPayBtn').onclick = () => { if(!selectedBoostId) return showToast('Select product first'); const amount = parseInt(document.getElementById('boostDuration').value); initiateBoostPayment(selectedBoostId, amount); };
+    }
+    async function initiateBoostPayment(productId, amount) {
+      if(!currentUser) return;
+      const FlutterwaveCheckout = window.FlutterwaveCheckout;
+      if(!FlutterwaveCheckout) return;
+      const tx_ref = "BOOST_"+Date.now();
+      FlutterwaveCheckout({ public_key: window.FLW_PUBLIC_KEY, tx_ref, amount, currency: "NGN", customer: { email: currentUser.email }, callback: async (resp) => { if(resp.status === "successful") { let durationHours = amount === 100 ? 24 : amount === 300 ? 72 : 168; const expiry = Date.now() + durationHours * 3600 * 1000; await window.updateDoc(window.doc(db,'products',productId), { boostExpiry: expiry }); showToast('Product boosted!'); renderMarketplace(); document.getElementById('dashboardModal').style.display = 'none'; } } });
+    }
+    async function showAdminPanel() { const totalProducts = (await window.getDocs(window.collection(db,'products'))).size; const totalUsers = (await window.getDocs(window.collection(db,'users'))).size; let html = `<h3>Admin Panel</h3><p>Total Products: ${totalProducts} | Users: ${totalUsers}</p><h4>All Products</h4><div id="adminProductsList"></div><h4>All Users</h4><div id="adminUsersList"></div>`; document.getElementById('adminContent').innerHTML = html; document.getElementById('adminModal').style.display = 'flex'; const prods = await window.getDocs(window.collection(db,'products')); let prodHtml = ''; prods.forEach(d => { prodHtml += `<div>${d.data().title} - <button class="adminDelProd" data-id="${d.id}">Delete Product</button></div>`; }); document.getElementById('adminProductsList').innerHTML = prodHtml; const users = await window.getDocs(window.collection(db,'users')); let userHtml = ''; users.forEach(u => { userHtml += `<div>${u.data().email} (${u.data().name}) - <button class="adminDelUser" data-id="${u.id}">Delete User</button></div>`; }); document.getElementById('adminUsersList').innerHTML = userHtml; document.querySelectorAll('.adminDelProd').forEach(btn => btn.addEventListener('click', async (e) => { await window.deleteDoc(window.doc(db,'products',btn.dataset.id)); showToast('Product deleted'); showAdminPanel(); renderMarketplace(); })); document.querySelectorAll('.adminDelUser').forEach(btn => btn.addEventListener('click', async (e) => { await window.deleteDoc(window.doc(db,'users',btn.dataset.id)); showToast('User doc deleted'); showAdminPanel(); })); }
+    document.getElementById('closeDashboard').onclick = () => document.getElementById('dashboardModal').style.display = 'none';
+    document.getElementById('closeAdmin').onclick = () => document.getElementById('adminModal').style.display = 'none';
+    
+    // Auth logic
+    document.getElementById('loginBtn').onclick = () => showAuthModal('login');
+    document.getElementById('signupBtn').onclick = () => showAuthModal('signup');
+    function showAuthModal(mode) { document.getElementById('authTitle').innerText = mode === 'login' ? 'Login' : 'Sign Up'; document.getElementById('authName').style.display = mode === 'signup' ? 'block' : 'none'; document.getElementById('authCountry').style.display = mode === 'signup' ? 'block' : 'none'; document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Login' : 'Sign Up'; window.authMode = mode; document.getElementById('authModal').style.display = 'flex'; }
+    document.getElementById('authForm').addEventListener('submit', async (e) => { e.preventDefault(); const email = document.getElementById('authEmail').value; const pass = document.getElementById('authPassword').value; if(window.authMode === 'signup') { const name = document.getElementById('authName').value; const country = document.getElementById('authCountry').value; try { const cred = await window.createUserWithEmailAndPassword(auth, email, pass); await window.setDoc(window.doc(db, 'users', cred.user.uid), { name, country, email, isAdmin: email === 'admin@digimarket.com' ? true : false, createdAt: Date.now() }); showToast('Account created'); } catch(err) { showToast(err.message, true); } } else { try { await window.signInWithEmailAndPassword(auth, email, pass); showToast('Logged in'); } catch(err) { showToast(err.message, true); } } document.getElementById('authModal').style.display = 'none'; });
+    document.getElementById('closeAuthModal').onclick = () => document.getElementById('authModal').style.display = 'none';
+    onAuthStateChanged(auth, async (user) => { currentUser = user; if(user) { const userDoc = await window.getDoc(window.doc(db,'users',user.uid)); if(userDoc.exists()) currentUserDoc = userDoc.data(); else { await window.setDoc(window.doc(db,'users',user.uid), { name: user.email.split('@')[0], country:'Unknown', email:user.email, isAdmin:false }); currentUserDoc = { name: user.email.split('@')[0], isAdmin: false }; } document.getElementById('authButtons').style.display = 'none'; document.getElementById('userMenu').style.display = 'flex'; if(currentUserDoc?.isAdmin) document.getElementById('adminPanelBtn').style.display = 'inline-block'; } else { document.getElementById('authButtons').style.display = 'flex'; document.getElementById('userMenu').style.display = 'none'; currentUserDoc = null; } renderMarketplace(); });
+    renderMarketplace();
+    const flutterwaveScript = document.createElement('script'); flutterwaveScript.src = 'https://checkout.flutterwave.com/v3.js'; document.head.appendChild(flutterwaveScript);
+  })();
+</script>
+</body>
+</html>
